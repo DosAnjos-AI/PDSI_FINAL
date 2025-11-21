@@ -5,10 +5,15 @@ Consolida metadados em CSV pipe-separated.
 
 import csv
 import json
+import sys
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-from .logger import get_logger
-from .utils import sanitize_string, ensure_dir
+
+# Adicionar diretorio pai ao path para importar config
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from src.logger import get_logger
+from src.utils import sanitize_string, ensure_dir
 
 
 logger = get_logger()

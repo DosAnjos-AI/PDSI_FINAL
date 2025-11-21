@@ -4,10 +4,15 @@ Mantem registro persistente em JSON.
 """
 
 import json
+import sys
 from pathlib import Path
 from typing import Set, Optional
-from .logger import get_logger
-from .utils import ensure_dir
+
+# Adicionar diretorio pai ao path para importar config
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from src.logger import get_logger
+from src.utils import ensure_dir
 
 
 logger = get_logger()
