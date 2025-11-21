@@ -22,6 +22,7 @@ from audio_normalizer import AudioNormalizer
 from skip_manager import SkipManager
 from csv_input_manager import CSVInputManager
 from source_mapper import SourceMapper
+from folder_name_manager import FolderNameManager
 
 
 logger = get_logger()
@@ -50,6 +51,7 @@ class DownloaderPDSI:
         self.skip_mgr = None
         self.csv_input_mgr = None
         self.source_mapper = None
+        self.folder_mgr = None
 
         # Estatisticas
         self.stats = {
@@ -205,6 +207,7 @@ class DownloaderPDSI:
         self.skip_mgr = SkipManager(self.output_dir)
         self.csv_input_mgr = CSVInputManager(self.input_dir)
         self.source_mapper = SourceMapper(self.output_dir)
+        self.folder_mgr = FolderNameManager(self.output_dir)
 
         logger.info("Componentes inicializados")
 
@@ -244,7 +247,7 @@ class DownloaderPDSI:
     def process_video(
         self,
         video_id: str,
-        source_id: str,
+        output_folder_name: str,
         metadata: dict,
         csv_extra_fields: Optional[Dict[str, str]] = None
     ) -> bool:
@@ -253,7 +256,7 @@ class DownloaderPDSI:
 
         Args:
             video_id: ID do video
-            source_id: ID da fonte
+            output_folder_name: Nome da pasta de output
             metadata: Metadados do video
             csv_extra_fields: Campos extras do CSV de input
 
@@ -265,13 +268,7 @@ class DownloaderPDSI:
 
         try:
             # Diretorios
-            video_temp_dir = self.temp_dir / source_id / video_id
-
-            # Determinar nome da pasta de output
-            if config.NOME_PASTA_OUTPUT == "default":
-                output_folder_name = source_id
-            else:
-                output_folder_name = config.NOME_PASTA_OUTPUT
+            video_temp_dir = self.temp_dir / output_folder_name / video_id
 
             video_output_dir = self.output_dir / output_folder_name
             metadata_dir = video_output_dir / "metadados"
@@ -347,6 +344,11 @@ class DownloaderPDSI:
         logger.info("="*60)
         logger.info(f"Processando URL: {url}")
 
+        # Log de origem
+        if link_data.get('csv_file'):
+            logger.info(f"Origem: {link_data['csv_file']}")
+            logger.info(f"Artista: {link_data.get('Nome_Artista', 'N/A')}")
+
         # Extrair campos extras do CSV
         csv_extra_fields = {
             'ID_Grupo': link_data.get('ID_Grupo', ''),
@@ -361,15 +363,41 @@ class DownloaderPDSI:
             # Extrair lista de videos
             video_ids, source_id = self.youtube_dl.get_video_ids_from_url(url)
 
+            # Determinar nome da pasta de output
+            output_folder_name = self.folder_mgr.get_folder_name(
+                link_data,
+                source_id,
+                config.NOME_PASTA_OUTPUT
+            )
+
+            logger.info(f"Pasta de output: {output_folder_name}")
+
             self.stats['total'] += len(video_ids)
 
             logger.info(f"Total de videos: {len(video_ids)}")
+
+            # Verificar limitador
+            url_type = detect_url_type(url)
+            max_audios = config.MAX_AUDIOS_PER_LINK
+
+            if max_audios > 0 and url_type in ["playlist", "channel"]:
+                logger.info(f"Limitador ativo: max {max_audios} sucessos por link")
+
+            # Contador de sucessos para limitador
+            sucessos_count = 0
 
             # Processar cada video
             for idx, video_id in enumerate(video_ids, 1):
                 if self.interrupted:
                     logger.warning("Processamento interrompido pelo usuario")
                     break
+
+                # Verificar limitador
+                if max_audios > 0 and url_type in ["playlist", "channel"]:
+                    if sucessos_count >= max_audios:
+                        logger.info(f"Limitador atingido: {max_audios} sucessos")
+                        logger.info(f"Pulando {len(video_ids) - idx + 1} videos restantes")
+                        break
 
                 logger.info("-"*60)
                 logger.info(f"[{idx}/{len(video_ids)}] Processando: {video_id}")
@@ -395,17 +423,18 @@ class DownloaderPDSI:
                     continue
 
                 # Download
-                audio_path = self.youtube_dl.download_audio(video_id, source_id)
+                audio_path = self.youtube_dl.download_audio(video_id, output_folder_name)
                 if not audio_path:
                     logger.error("Falha no download")
                     self.stats['failed'] += 1
                     continue
 
                 # Processar (segment + normalize)
-                if self.process_video(video_id, source_id, metadata, csv_extra_fields=csv_extra_fields):
+                if self.process_video(video_id, output_folder_name, metadata, csv_extra_fields=csv_extra_fields):
                     # Adicionar aos processados
                     self.skip_mgr.add_processed(video_id)
                     self.stats['success'] += 1
+                    sucessos_count += 1
                 else:
                     self.stats['failed'] += 1
 
@@ -414,19 +443,19 @@ class DownloaderPDSI:
                     delay = random_delay(config.DELAY_MIN, config.DELAY_MAX)
                     logger.info(f"Delay: {delay}s")
 
+            # Log final de sucessos
+            logger.info(f"Sucessos neste link: {sucessos_count}")
+
             # Consolidar metadados em CSV
             logger.info("Consolidando metadados em CSV...")
-
-            # Determinar pasta de output
-            if config.NOME_PASTA_OUTPUT == "default":
-                output_folder_name = source_id
-            else:
-                output_folder_name = config.NOME_PASTA_OUTPUT
 
             metadata_dir = self.output_dir / output_folder_name / "metadados"
             csv_path = metadata_dir / "metadata.csv"
 
-            self.metadata_mgr.consolidate_metadata_csv(metadata_dir, csv_path)
+            if self.metadata_mgr.consolidate_metadata_csv(metadata_dir, csv_path):
+                # Adicionar ao CSV global
+                global_csv = self.output_dir / "metadata_global.csv"
+                self.metadata_mgr.append_to_global_csv(csv_path, global_csv)
 
         except Exception as e:
             logger.error(f"Erro ao processar URL: {str(e)}")

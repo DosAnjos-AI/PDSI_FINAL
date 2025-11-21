@@ -159,3 +159,17 @@ RETRY_ATTEMPTS = 1
 # Apos este tempo sem resposta, o download e cancelado
 # Exemplo: 300 = 5 minutos
 TIMEOUT_SECONDS = 300
+
+# ==============================================================================
+# LIMITADOR DE AUDIOS POR LINK
+# ==============================================================================
+
+# Numero maximo de audios bem-sucedidos por link (playlist/canal)
+# Aplica apenas em playlists e canais (nao em video unico)
+# 0 = ilimitado (processa todos os videos do link)
+# 25 = para apos baixar 25 sucessos (recomendado para datasets balanceados)
+#
+# Exemplo: Playlist tem 100 videos, MAX_AUDIOS_PER_LINK = 25
+# Sistema baixa ate conseguir 25 sucessos (pode processar 30-40 videos no total
+# devido a falhas/skips), depois para e vai para o proximo link
+MAX_AUDIOS_PER_LINK = 25

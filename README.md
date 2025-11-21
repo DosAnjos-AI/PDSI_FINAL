@@ -105,7 +105,10 @@ MAX_DURATION = 10000          # Duracao maxima
 SKIP_SHORTS = True            # Pular YouTube Shorts
 
 # Output
-NOME_PASTA_OUTPUT = "default" # "default" usa source_ID
+NOME_PASTA_OUTPUT = "default" # "default" usa Nome_Artista do CSV
+
+# Limitador
+MAX_AUDIOS_PER_LINK = 25      # 0 = ilimitado, 25 = para apos 25 sucessos
 ```
 
 ## Uso
@@ -134,14 +137,18 @@ cat logs/errors.log
 ```
 output/
 ├── processed_ids.json              # Log de IDs processados (skip)
-└── {NOME_PASTA_OUTPUT}/
+├── metadata_global.csv             # CSV consolidado de todos os artistas
+├── source_mapping.json             # Mapeamento fonte-pasta
+└── {Nome_Artista}/                 # Pasta com nome do artista (sanitizado)
     ├── metadados/
-    │   ├── metadata.csv            # CSV consolidado (9 campos)
+    │   ├── metadata.csv            # CSV consolidado (12 campos)
     │   ├── video_001.json          # Backup JSON
     │   └── video_002.json
     ├── video_001.mp3               # Audio normalizado e segmentado
     └── video_002.mp3
 ```
+
+Nota: Quando NOME_PASTA_OUTPUT = "default", o sistema usa Nome_Artista do CSV para criar pastas. Se o Nome_Artista estiver vazio, usa o source_ID. Nomes duplicados recebem sufixo numerico (_2, _3, etc).
 
 ### Formato CSV de Saida
 
@@ -164,17 +171,18 @@ Os campos ID_Grupo, Grupo_Maior, ID_Subgrupo, Subgrupo, Nome_Artista e Genero_Vo
    - Detectar tipo (video/playlist/canal)
    - Extrair lista de video_IDs
 5. Para cada video_ID:
+   - Verificar limitador (MAX_AUDIOS_PER_LINK)
    - Verificar skip (ja processado?)
    - Verificar filtros (duracao, Shorts, etc)
-   - Download audio -> temp/source_ID/video_ID/original.mp3
+   - Download audio -> temp/Nome_Artista/video_ID/original.mp3
    - Segmentar primeiros X segundos -> segmented.mp3
    - Normalizar com SOX -> normalized.mp3
-   - Mover para output/NOME_PASTA/video_ID.mp3
+   - Mover para output/Nome_Artista/video_ID.mp3
    - Salvar metadados JSON
    - Adicionar ID em processed_ids.json
    - Cleanup temp/ (se AUTO_CLEANUP_TEMP=True)
    - Delay randomico
-6. Consolidar metadata.csv
+6. Consolidar metadata.csv local e global
 7. Mostrar estatisticas finais
 
 ## Troubleshooting
@@ -308,6 +316,14 @@ GitHub: https://github.com/DosAnjos-AI
 
 ## Changelog
 
+### v1.1.0 (2025-01-21)
+- Input CSV com 7 campos (ID_Grupo, Grupo_Maior, etc)
+- Metadados expandidos para 12 campos
+- Nome de pastas baseado em Nome_Artista do CSV
+- Limitador de audios por link (MAX_AUDIOS_PER_LINK)
+- CSV global consolidado (metadata_global.csv)
+- Sanitizacao e numeracao de pastas duplicadas
+
 ### v1.0.0 (2025-01-20)
 - Lancamento inicial
 - Download de audios do YouTube
@@ -318,7 +334,7 @@ GitHub: https://github.com/DosAnjos-AI
 
 ---
 
-**Versao:** 1.0.0
-**Data:** 2025-01-20
+**Versao:** 1.1.0
+**Data:** 2025-01-21
 **Branch:** downloader_local
 **Repositorio:** https://github.com/DosAnjos-AI/downloader_PDSI

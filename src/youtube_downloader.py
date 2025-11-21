@@ -160,7 +160,7 @@ class YouTubeDownloader:
     def download_audio(
         self,
         video_id: str,
-        source_id: str,
+        output_folder_name: str,
         output_filename: str = "original"
     ) -> Optional[Path]:
         """
@@ -168,14 +168,14 @@ class YouTubeDownloader:
 
         Args:
             video_id: ID do video
-            source_id: ID da fonte (playlist/canal/video)
+            output_folder_name: Nome da pasta de output
             output_filename: Nome do arquivo de saida (sem extensao)
 
         Returns:
             Path do arquivo baixado ou None se falhar
         """
-        # Criar diretorio de destino: temp/source_id/video_id/
-        video_dir = self.temp_dir / source_id / video_id
+        # Criar diretorio de destino: temp/output_folder_name/video_id/
+        video_dir = self.temp_dir / output_folder_name / video_id
         ensure_dir(video_dir)
 
         output_path = video_dir / f"{output_filename}.{config.AUDIO_FORMAT}"
