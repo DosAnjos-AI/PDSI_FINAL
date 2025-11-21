@@ -1,0 +1,30 @@
+# Pastas temporarias e outputs
+temp/
+logs/
+output/
+
+# Credenciais (caso sejam adicionadas no futuro)
+credentials.json
+token.pickle
+.env
+
+# Python
+*.pyc
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+build/
+dist/
+*.egg-info/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
