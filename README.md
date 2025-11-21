@@ -69,17 +69,21 @@ USE_BATCH_FILE = False
 URL = "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
 
-### Modo Batch
+### Modo Batch (CSV)
 ```python
 USE_BATCH_FILE = True
+DELETE_PROCESSED_CSV = False  # True para deletar CSVs apos processamento
 ```
 
-Crie arquivo `input/links.txt` com URLs (uma por linha):
+Crie arquivo(s) CSV em `input/` com 7 colunas (pipe-separated):
 ```
-https://www.youtube.com/watch?v=VIDEO_ID1
-https://www.youtube.com/playlist?list=PLAYLIST_ID
-https://www.youtube.com/@CHANNEL_NAME/videos
+ID_Grupo|Grupo_Maior|ID_Subgrupo|Subgrupo|Nome_Artista|Genero_Vocalista|Links_youtube
+1|Rock|101|Rock Classico|Led Zeppelin|M|https://www.youtube.com/watch?v=VIDEO_ID1
+1|Rock|102|Hard Rock|AC/DC|M|https://www.youtube.com/playlist?list=PLAYLIST_ID
+2|Pop|201|Pop Internacional|Madonna|F|https://www.youtube.com/@CHANNEL_NAME/videos
 ```
+
+Os campos do CSV serao incluidos nos metadados de saida.
 
 ### Parametros Importantes
 ```python
@@ -139,21 +143,23 @@ output/
     └── video_002.mp3
 ```
 
-### Formato CSV
+### Formato CSV de Saida
 
 Separador: pipe `|`
 Encoding: UTF-8
-Campos: 9
+Campos: 12
 
 ```
-id|title|duration|upload_date|uploader|uploader_id|view_count|like_count|comment_count
+id|ID_Grupo|Grupo_Maior|ID_Subgrupo|Subgrupo|Nome_Artista|title|Genero_Vocalista|duration|view_count|like_count|comment_count
 ```
+
+Os campos ID_Grupo, Grupo_Maior, ID_Subgrupo, Subgrupo, Nome_Artista e Genero_Vocalista sao preenchidos automaticamente quando se usa modo batch com CSVs de input.
 
 ## Fluxo de Processamento
 
 1. Validar config.py e dependencias (SOX, yt-dlp, pydub, ffmpeg)
 2. Carregar processed_ids.json (sistema de skip)
-3. Ler URL(s) do config ou arquivo batch
+3. Ler URL(s) do config ou arquivos CSV de input
 4. Para cada URL:
    - Detectar tipo (video/playlist/canal)
    - Extrair lista de video_IDs
@@ -247,24 +253,26 @@ URL = "https://www.youtube.com/playlist?list=PLxxx"
 NOME_PASTA_OUTPUT = "default"  # Usa playlist_ID
 ```
 
-### Exemplo 3: Batch de Links
+### Exemplo 3: Batch de Links (CSV)
 ```python
 # config.py
 USE_BATCH_FILE = True
+DELETE_PROCESSED_CSV = False
 ```
 
-input/links.txt:
+input/artistas.csv:
 ```
-https://www.youtube.com/watch?v=video1
-https://www.youtube.com/playlist?list=PLxxx
-https://www.youtube.com/@canal/videos
+ID_Grupo|Grupo_Maior|ID_Subgrupo|Subgrupo|Nome_Artista|Genero_Vocalista|Links_youtube
+1|Rock|101|Rock BR|Legiao Urbana|M|https://www.youtube.com/watch?v=video1
+1|Rock|102|Rock BR|Titas|M|https://www.youtube.com/playlist?list=PLxxx
+2|MPB|201|MPB|Elis Regina|F|https://www.youtube.com/@canal/videos
 ```
 
 ```bash
 $ python main.py
-[INFO] Modo BATCH_FILE: links.txt
-[INFO] Encontradas 3 URLs no arquivo batch
-[INFO] Processando URL 1/3
+[INFO] Modo BATCH_FILE: lendo CSVs
+[INFO] Encontrados 3 links nos CSVs
+[INFO] Processando link 1/3
 ...
 ```
 

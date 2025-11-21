@@ -20,6 +20,8 @@ from metadata_manager import MetadataManager
 from audio_segmenter import AudioSegmenter
 from audio_normalizer import AudioNormalizer
 from skip_manager import SkipManager
+from csv_input_manager import CSVInputManager
+from source_mapper import SourceMapper
 
 
 logger = get_logger()
@@ -46,6 +48,8 @@ class DownloaderPDSI:
         self.segmenter = None
         self.normalizer = None
         self.skip_mgr = None
+        self.csv_input_mgr = None
+        self.source_mapper = None
 
         # Estatisticas
         self.stats = {
@@ -171,9 +175,9 @@ class DownloaderPDSI:
 
         # Validar batch file se modo batch
         if config.USE_BATCH_FILE:
-            txt_files = list(self.input_dir.glob("*.txt"))
-            if not txt_files:
-                errors.append("USE_BATCH_FILE=True mas nenhum arquivo .txt encontrado em input/")
+            csv_files = list(self.input_dir.glob("*.csv"))
+            if not csv_files:
+                errors.append("USE_BATCH_FILE=True mas nenhum arquivo .csv encontrado em input/")
 
         if errors:
             logger.error("ERRO: Configuracoes invalidas:")
@@ -199,36 +203,43 @@ class DownloaderPDSI:
         self.segmenter = AudioSegmenter()
         self.normalizer = AudioNormalizer()
         self.skip_mgr = SkipManager(self.output_dir)
+        self.csv_input_mgr = CSVInputManager(self.input_dir)
+        self.source_mapper = SourceMapper(self.output_dir)
 
         logger.info("Componentes inicializados")
 
     def get_urls_to_process(self) -> list:
         """
-        Retorna lista de URLs para processar.
+        Retorna lista de URLs/dicts para processar.
 
         Returns:
-            Lista de URLs
+            Lista de URLs (modo single) ou lista de dicts (modo batch)
         """
         if config.USE_BATCH_FILE:
-            # Modo batch: ler arquivo .txt
-            txt_files = list(self.input_dir.glob("*.txt"))
+            # Modo batch: ler arquivos CSV
+            logger.info("Modo BATCH_FILE: lendo CSVs")
 
-            if not txt_files:
-                logger.error("Nenhum arquivo .txt encontrado em input/")
+            links_data = self.csv_input_mgr.get_all_links()
+
+            if not links_data:
+                logger.error("Nenhum link valido encontrado nos CSVs")
                 return []
 
-            batch_file = txt_files[0]
-            logger.info(f"Modo BATCH_FILE: {batch_file.name}")
-
-            with open(batch_file, 'r', encoding='utf-8') as f:
-                urls = [line.strip() for line in f if line.strip()]
-
-            logger.info(f"Encontradas {len(urls)} URLs no arquivo batch")
-            return urls
+            logger.info(f"Encontrados {len(links_data)} links nos CSVs")
+            return links_data
         else:
-            # Modo single: URL do config
+            # Modo single: URL do config (retorna como dict para consistencia)
             logger.info("Modo URL UNICA")
-            return [config.URL]
+            return [{
+                'url': config.URL,
+                'ID_Grupo': '',
+                'Grupo_Maior': '',
+                'ID_Subgrupo': '',
+                'Subgrupo': '',
+                'Nome_Artista': '',
+                'Genero_Vocalista': '',
+                'csv_file': ''
+            }]
 
     def process_video(
         self,
@@ -324,15 +335,27 @@ class DownloaderPDSI:
             logger.error(f"Erro ao processar video {video_id}: {str(e)}")
             return False
 
-    def process_url(self, url: str):
+    def process_url(self, link_data: Dict[str, str]):
         """
         Processa uma URL completa.
 
         Args:
-            url: URL do YouTube
+            link_data: Dicionario com URL e campos extras do CSV
         """
+        url = link_data.get('url', '')
+
         logger.info("="*60)
         logger.info(f"Processando URL: {url}")
+
+        # Extrair campos extras do CSV
+        csv_extra_fields = {
+            'ID_Grupo': link_data.get('ID_Grupo', ''),
+            'Grupo_Maior': link_data.get('Grupo_Maior', ''),
+            'ID_Subgrupo': link_data.get('ID_Subgrupo', ''),
+            'Subgrupo': link_data.get('Subgrupo', ''),
+            'Nome_Artista': link_data.get('Nome_Artista', ''),
+            'Genero_Vocalista': link_data.get('Genero_Vocalista', '')
+        }
 
         try:
             # Extrair lista de videos
@@ -379,7 +402,7 @@ class DownloaderPDSI:
                     continue
 
                 # Processar (segment + normalize)
-                if self.process_video(video_id, source_id, metadata, csv_extra_fields=None):
+                if self.process_video(video_id, source_id, metadata, csv_extra_fields=csv_extra_fields):
                     # Adicionar aos processados
                     self.skip_mgr.add_processed(video_id)
                     self.stats['success'] += 1
@@ -438,22 +461,28 @@ class DownloaderPDSI:
         # 3. Inicializar componentes
         self.initialize_components()
 
-        # 4. Obter URLs
-        urls = self.get_urls_to_process()
-        if not urls:
+        # 4. Obter URLs/links
+        links_data = self.get_urls_to_process()
+        if not links_data:
             logger.error("Nenhuma URL para processar")
             sys.exit(1)
 
-        # 5. Processar cada URL
-        for url_idx, url in enumerate(urls, 1):
+        # 5. Processar cada link
+        for link_idx, link_data in enumerate(links_data, 1):
             if self.interrupted:
                 break
 
-            logger.info(f"\nProcessando URL {url_idx}/{len(urls)}")
-            self.process_url(url)
+            logger.info(f"\nProcessando link {link_idx}/{len(links_data)}")
+            self.process_url(link_data)
 
         # 6. Mostrar estatisticas
         self.show_statistics()
+
+        # 7. Deletar CSVs processados (se configurado)
+        if config.USE_BATCH_FILE and config.DELETE_PROCESSED_CSV:
+            if self.stats['success'] > 0 and not self.interrupted:
+                logger.info("Deletando CSVs processados...")
+                self.csv_input_mgr.delete_processed_csvs()
 
         if self.interrupted:
             logger.warning("Processamento foi interrompido - estado salvo")

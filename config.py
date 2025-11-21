@@ -8,9 +8,18 @@ Todos os parametros sao ajustaveis pelo usuario.
 # ==============================================================================
 
 # Define se processa arquivo de batch ou URL unica
-# True: Le arquivo .txt da pasta input/
+# True: Le arquivos CSV da pasta input/
 # False: Processa URL definida abaixo
 USE_BATCH_FILE = False
+
+# ==============================================================================
+# INPUT CSV (usado se USE_BATCH_FILE = True)
+# ==============================================================================
+
+# Deletar arquivos CSV apos processamento bem-sucedido
+# True: Remove CSVs processados da pasta input/
+# False: Mantem CSVs para referencia
+DELETE_PROCESSED_CSV = False
 
 # ==============================================================================
 # INPUT - LINK UNICO (usado se USE_BATCH_FILE = False)
