@@ -7,6 +7,7 @@ Orquestra download, segmentacao e normalizacao de audios do YouTube.
 import sys
 from pathlib import Path
 import signal
+from typing import Optional, Dict
 
 # Adicionar src/ ao path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
@@ -233,7 +234,8 @@ class DownloaderPDSI:
         self,
         video_id: str,
         source_id: str,
-        metadata: dict
+        metadata: dict,
+        csv_extra_fields: Optional[Dict[str, str]] = None
     ) -> bool:
         """
         Processa um video completo: download -> segment -> normalize -> save.
@@ -242,6 +244,7 @@ class DownloaderPDSI:
             video_id: ID do video
             source_id: ID da fonte
             metadata: Metadados do video
+            csv_extra_fields: Campos extras do CSV de input
 
         Returns:
             True se processou com sucesso
@@ -297,7 +300,11 @@ class DownloaderPDSI:
 
             # 5. Salvar metadados JSON
             json_path = metadata_dir / f"{video_id}.json"
-            self.metadata_mgr.save_json_metadata(metadata, json_path)
+            self.metadata_mgr.save_json_metadata(
+                metadata,
+                json_path,
+                csv_extra_fields=csv_extra_fields
+            )
 
             # 6. Cleanup temp (se configurado)
             if config.AUTO_CLEANUP_TEMP:
@@ -372,7 +379,7 @@ class DownloaderPDSI:
                     continue
 
                 # Processar (segment + normalize)
-                if self.process_video(video_id, source_id, metadata):
+                if self.process_video(video_id, source_id, metadata, csv_extra_fields=None):
                     # Adicionar aos processados
                     self.skip_mgr.add_processed(video_id)
                     self.stats['success'] += 1

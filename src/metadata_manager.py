@@ -23,18 +23,21 @@ class MetadataManager:
     """
     Gerencia extracao e consolidacao de metadados.
 
-    Formato CSV: 9 campos pipe-separated
-    - id|title|duration|upload_date|uploader|uploader_id|view_count|like_count|comment_count
+    Formato CSV: 12 campos pipe-separated
+    id|ID_Grupo|Grupo_Maior|ID_Subgrupo|Subgrupo|Nome_Artista|title|Genero_Vocalista|duration|view_count|like_count|comment_count
     """
 
-    # Campos obrigatorios do CSV
+    # Campos obrigatorios do CSV (ATUALIZADOS - 12 campos)
     CSV_FIELDS = [
         'id',
+        'ID_Grupo',
+        'Grupo_Maior',
+        'ID_Subgrupo',
+        'Subgrupo',
+        'Nome_Artista',
         'title',
+        'Genero_Vocalista',
         'duration',
-        'upload_date',
-        'uploader',
-        'uploader_id',
         'view_count',
         'like_count',
         'comment_count'
@@ -56,28 +59,47 @@ class MetadataManager:
 
         logger.info("MetadataManager inicializado")
 
-    def extract_csv_fields(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+    def extract_csv_fields(
+        self,
+        metadata: Dict[str, Any],
+        csv_extra_fields: Optional[Dict[str, str]] = None
+    ) -> Dict[str, Any]:
         """
-        Extrai os 9 campos necessarios para o CSV do metadata completo.
+        Extrai os 12 campos necessarios para o CSV.
 
         Args:
-            metadata: Dicionario com metadados completos do yt-dlp
+            metadata: Dicionario com metadados do yt-dlp
+            csv_extra_fields: Campos extras do CSV de input (ID_Grupo, Nome_Artista, etc)
 
         Returns:
-            Dicionario com apenas os 9 campos do CSV
+            Dicionario com os 12 campos do CSV
         """
-        # Extrair campos com valores padrao
+        # Campos do yt-dlp (reduzidos - removidos upload_date, uploader, uploader_id)
         csv_data = {
             'id': metadata.get('id', ''),
             'title': sanitize_string(metadata.get('title', '')),
             'duration': metadata.get('duration', 0),
-            'upload_date': metadata.get('upload_date', ''),
-            'uploader': sanitize_string(metadata.get('uploader', '')),
-            'uploader_id': metadata.get('uploader_id', ''),
             'view_count': metadata.get('view_count', 0),
             'like_count': metadata.get('like_count', 0),
             'comment_count': metadata.get('comment_count', 0)
         }
+
+        # Adicionar campos do CSV de input (se fornecidos)
+        if csv_extra_fields:
+            csv_data['ID_Grupo'] = csv_extra_fields.get('ID_Grupo', '')
+            csv_data['Grupo_Maior'] = sanitize_string(csv_extra_fields.get('Grupo_Maior', ''))
+            csv_data['ID_Subgrupo'] = csv_extra_fields.get('ID_Subgrupo', '')
+            csv_data['Subgrupo'] = sanitize_string(csv_extra_fields.get('Subgrupo', ''))
+            csv_data['Nome_Artista'] = sanitize_string(csv_extra_fields.get('Nome_Artista', ''))
+            csv_data['Genero_Vocalista'] = csv_extra_fields.get('Genero_Vocalista', '')
+        else:
+            # Valores vazios se nao fornecidos (modo single URL sem CSV)
+            csv_data['ID_Grupo'] = ''
+            csv_data['Grupo_Maior'] = ''
+            csv_data['ID_Subgrupo'] = ''
+            csv_data['Subgrupo'] = ''
+            csv_data['Nome_Artista'] = ''
+            csv_data['Genero_Vocalista'] = ''
 
         # Garantir tipos corretos
         csv_data['duration'] = int(csv_data['duration']) if csv_data['duration'] else 0
@@ -90,7 +112,8 @@ class MetadataManager:
     def save_json_metadata(
         self,
         metadata: Dict[str, Any],
-        output_path: Path
+        output_path: Path,
+        csv_extra_fields: Optional[Dict[str, str]] = None
     ) -> bool:
         """
         Salva metadados completos em JSON (backup).
@@ -98,13 +121,14 @@ class MetadataManager:
         Args:
             metadata: Dicionario com metadados completos
             output_path: Caminho do arquivo JSON
+            csv_extra_fields: Campos extras do CSV de input
 
         Returns:
             True se salvou com sucesso
         """
         try:
-            # Extrair apenas os 9 campos do CSV para o JSON tambem
-            csv_fields = self.extract_csv_fields(metadata)
+            # Extrair os 12 campos do CSV para o JSON
+            csv_fields = self.extract_csv_fields(metadata, csv_extra_fields)
 
             with open(output_path, 'w', encoding='utf-8') as f:
                 json.dump(csv_fields, f, ensure_ascii=False, indent=2)
@@ -186,6 +210,59 @@ class MetadataManager:
             logger.error(f"Erro ao salvar CSV {output_csv_path}: {str(e)}")
             return False
 
+    def append_to_global_csv(
+        self,
+        local_csv_path: Path,
+        global_csv_path: Path
+    ) -> bool:
+        """
+        Adiciona registros de um CSV local ao CSV global (metadata_global.csv).
+
+        Args:
+            local_csv_path: Caminho do CSV local (metadata.csv de uma pasta)
+            global_csv_path: Caminho do CSV global (metadata_global.csv)
+
+        Returns:
+            True se adicionou com sucesso
+        """
+        if not local_csv_path.exists():
+            logger.error(f"CSV local nao existe: {local_csv_path}")
+            return False
+
+        try:
+            # Ler CSV local
+            with open(local_csv_path, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f, delimiter='|')
+                rows = list(reader)
+
+            if not rows:
+                logger.warning(f"CSV local esta vazio: {local_csv_path}")
+                return False
+
+            # Criar header se global nao existe
+            file_exists = global_csv_path.exists()
+
+            # Append ao CSV global
+            with open(global_csv_path, 'a', encoding='utf-8', newline='') as f:
+                writer = csv.DictWriter(
+                    f,
+                    fieldnames=self.CSV_FIELDS,
+                    delimiter='|'
+                )
+
+                # Escrever header apenas se arquivo novo
+                if not file_exists:
+                    writer.writeheader()
+
+                writer.writerows(rows)
+
+            logger.info(f"Adicionados {len(rows)} registros ao CSV global")
+            return True
+
+        except Exception as e:
+            logger.error(f"Erro ao adicionar ao CSV global: {str(e)}")
+            return False
+
     def validate_csv(self, csv_path: Path) -> bool:
         """
         Valida integridade de um arquivo CSV.
@@ -203,6 +280,8 @@ class MetadataManager:
                 # Verificar cabecalho
                 if reader.fieldnames != self.CSV_FIELDS:
                     logger.error(f"Cabecalho invalido no CSV: {csv_path}")
+                    logger.error(f"Esperado: {self.CSV_FIELDS}")
+                    logger.error(f"Encontrado: {reader.fieldnames}")
                     return False
 
                 # Verificar linhas
